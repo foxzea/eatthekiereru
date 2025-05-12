@@ -89,7 +89,7 @@ class GameScene extends Phaser.Scene {
         const textStyle = { fontSize: '24px', fill: '#fff' };
         const buttonStyle = { fontSize: '32px', fill: '#0f0', fontStyle: 'bold', backgroundColor: '#555', padding: { x: 10, y: 5 } };
         this.levelText = this.add.text(this.cameras.main.width - 16, 16, `Level: ${levelIndex}`, textStyle).setOrigin(1, 0);
-        this.chickenCountText = this.add.text(16, 16, `Chickens: ${this.chickensRemaining}`, textStyle);
+        this.chickenCountText = this.add.text(16, 16, `Kererus: ${this.chickensRemaining}`, textStyle);
         this.timerText = this.add.text(16, 48, 'Panic Timer: -', textStyle);
         this.statusText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 50, '', { fontSize: '48px', fill: '#ff0000', fontStyle: 'bold' }).setOrigin(0.5).setVisible(false);
         this.startButton = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY, 'START GAME', buttonStyle).setOrigin(0.5).setInteractive().on('pointerdown', this.startGame, this);
