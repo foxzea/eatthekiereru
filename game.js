@@ -3,96 +3,89 @@ class GameScene extends Phaser.Scene {
     constructor() {
         super({ key: 'GameScene' });
         this.GameState = { PRESTART: 'prestart', PLAYING: 'playing', GAMEOVER: 'gameover' };
-        // Game Objects
         this.player = null; this.chickens = null; this.ground = null;
-        // Input
         this.cursors = null; this.keyA = null; this.keyD = null; this.keySpace = null; this.keyS = null;
-        // State & Logic
         this.gameState = this.GameState.PRESTART; this.currentLevel = 1;
         this.chickensRemaining = 0; this.isSneaking = false;
         this.panicTimerValue = 10; this.panicTimerEvent = null; this.isPanicTimerRunning = false;
         this.activeChickenSettings = {};
-        // Player previous position tracking
         this.playerPrevX = 0; this.playerPrevY = 0;
 
-        // Constants
         this.PLAYER_MOVE_SPEED = 160; this.PLAYER_SNEAK_SPEED = 70; this.PLAYER_JUMP_SPEED = 350;
-        this.NORMAL_DETECTION_RADIUS = 200; // NEW constant
-        this.SNEAK_MOVEMENT_DETECTION_RADIUS = 100; // NEW constant
-        this.WITNESS_PANIC_RADIUS = 250; // NEW: Max distance for witness panic
-        this.GAME_GRAVITY = 600;
-        // Removed old detection radii
+        this.NORMAL_DETECTION_RADIUS = 200; this.SNEAK_MOVEMENT_DETECTION_RADIUS = 100;
+        this.WITNESS_PANIC_RADIUS = 250; this.GAME_GRAVITY = 600;
+        this.CHICKEN_GLIDE_DRAG_Y = 150;
 
-        // Level Settings
-        this.levelSettings = [ null,
-            { groundSpeed: 60, airSpeed: 90, jumpVelMult: 1.5, jumpProb: 0.01, dirChangeProb: 0.03, idleTurnProb: 0.005 }, // Lvl 1 (Added idleTurnProb)
-            { groundSpeed: 80, airSpeed: 120, jumpVelMult: 1.8, jumpProb: 0.02, dirChangeProb: 0.05, idleTurnProb: 0.008 }, // Lvl 2
-            { groundSpeed: 100, airSpeed: 150, jumpVelMult: 2.0, jumpProb: 0.03, dirChangeProb: 0.07, idleTurnProb: 0.01 },  // Lvl 3
-            { groundSpeed: 110, airSpeed: 170, jumpVelMult: 2.2, jumpProb: 0.04, dirChangeProb: 0.10, idleTurnProb: 0.012 },// Lvl 4
-            { groundSpeed: 120, airSpeed: 190, jumpVelMult: 2.4, jumpProb: 0.05, dirChangeProb: 0.13, idleTurnProb: 0.015 } // Lvl 5
+        // Player Physics Body Constants (Based on fox.png: 85w x 50h)
+        this.PLAYER_SPRITE_FRAME_WIDTH_NORMAL = 85;
+        this.PLAYER_SPRITE_FRAME_HEIGHT_NORMAL = 50;
+        this.PLAYER_BODY_WIDTH = 45;
+        this.PLAYER_BODY_HEIGHT = 48;
+        this.PLAYER_BODY_OFFSET_X = (this.PLAYER_SPRITE_FRAME_WIDTH_NORMAL - this.PLAYER_BODY_WIDTH) / 2;
+        this.PLAYER_BODY_OFFSET_Y = (this.PLAYER_SPRITE_FRAME_HEIGHT_NORMAL - this.PLAYER_BODY_HEIGHT);
+
+        this.levelSettings = [ null, /* ... level settings ... */
+            { groundSpeed: 60, airSpeed: 90, jumpVelMult: 1.5, jumpProb: 0.01, dirChangeProb: 0.03, idleTurnProb: 0.005 },
+            { groundSpeed: 80, airSpeed: 120, jumpVelMult: 1.8, jumpProb: 0.02, dirChangeProb: 0.05, idleTurnProb: 0.008 },
+            { groundSpeed: 100, airSpeed: 150, jumpVelMult: 2.0, jumpProb: 0.03, dirChangeProb: 0.07, idleTurnProb: 0.01 },
+            { groundSpeed: 110, airSpeed: 170, jumpVelMult: 2.2, jumpProb: 0.04, dirChangeProb: 0.10, idleTurnProb: 0.012 },
+            { groundSpeed: 120, airSpeed: 190, jumpVelMult: 2.4, jumpProb: 0.05, dirChangeProb: 0.13, idleTurnProb: 0.015 }
         ];
         this.MAX_LEVEL = this.levelSettings.length - 1;
-
-        // UI Elements
         this.chickenCountText = null; this.timerText = null; this.levelText = null;
         this.statusText = null; this.startButton = null; this.restartButton = null;
     }
 
-    preload() { /* ... preload remains the same ... */
+    preload() { /* ... same ... */
         console.log('Preloading assets...');
         this.load.image('fox', 'assets/fox.png');
         this.load.image('chicken', 'assets/chicken.png');
         this.load.image('platform', 'assets/platform.png');
+        this.load.image('fox_jump', 'assets/fox2.png');
+        this.load.image('chicken_jump', 'assets/chicken2.png');
+        this.load.image('fox_sneak', 'assets/fox3.png');
         console.log('Asset preload finished.');
     }
 
-    create() {
+    create() { /* ... same ... */
         console.log(`Creating Level ${this.currentLevel}...`);
         this.gameState = this.GameState.PRESTART;
         const levelIndex = Math.min(this.currentLevel, this.MAX_LEVEL);
         this.activeChickenSettings = this.levelSettings[levelIndex];
-        console.log('Loaded settings:', this.activeChickenSettings);
-
-        // --- Setup Ground ---
         this.ground = this.physics.add.staticGroup();
         this.ground.create(400, 580, 'platform').setScale(1).refreshBody();
-
-        // --- Setup Player ---
         this.player = this.physics.add.sprite(100, 450, 'fox');
         this.player.setBounce(0.1);
         this.player.setCollideWorldBounds(true);
-        this.physics.add.collider(this.player, this.ground);
-        this.playerPrevX = this.player.x; // Initialize previous position
-        this.playerPrevY = this.player.y;
-
-        // --- Setup Chickens ---
+        this.playerPrevX = this.player.x; this.playerPrevY = this.player.y;
+        this.player.setData('currentTextureKey', 'fox');
+        if (this.player.body) {
+            this.player.body.setSize(this.PLAYER_BODY_WIDTH, this.PLAYER_BODY_HEIGHT);
+            this.player.body.setOffset(this.PLAYER_BODY_OFFSET_X, this.PLAYER_BODY_OFFSET_Y);
+            console.log(`Initial player body SET ONCE - Size: ${this.PLAYER_BODY_WIDTH}x${this.PLAYER_BODY_HEIGHT}, Offset: (${this.PLAYER_BODY_OFFSET_X}, ${this.PLAYER_BODY_OFFSET_Y})`);
+        }
         this.chickens = this.physics.add.group({ bounceY: 0.3, collideWorldBounds: true });
-        // Create chickens slightly above platform
         const startY = 500;
         this.chickens.create(300, startY, 'chicken');
         this.chickens.create(500, startY, 'chicken');
         this.chickens.create(700, startY, 'chicken');
         this.chickens.getChildren().forEach(chicken => {
             chicken.isPanicked = false;
-            chicken.facingDirection = (Math.random() < 0.5) ? -1 : 1; // Random initial facing direction
-            chicken.setFlipX(chicken.facingDirection < 0); // Set initial flip
+            chicken.facingDirection = (Math.random() < 0.5) ? -1 : 1;
+            chicken.setFlipX(chicken.facingDirection < 0);
+            chicken.setData('currentTextureKey', 'chicken');
+            chicken.body.setDragY(0);
         });
         this.chickensRemaining = this.chickens.getChildren().length;
+        this.physics.add.collider(this.player, this.ground);
         this.physics.add.collider(this.chickens, this.ground);
         this.physics.add.collider(this.chickens, this.chickens);
-
-        // --- Setup Input ---
         this.cursors = this.input.keyboard.createCursorKeys();
         this.keyA = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
         this.keyD = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
         this.keyS = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S);
         this.keySpace = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-
-        // --- Setup Interaction ---
         this.physics.add.overlap(this.player, this.chickens, this.eatChicken, null, this);
-
-        // --- Setup UI ---
-        /* ... UI setup remains the same ... */
         const textStyle = { fontSize: '24px', fill: '#fff' };
         const buttonStyle = { fontSize: '32px', fill: '#0f0', fontStyle: 'bold', backgroundColor: '#555', padding: { x: 10, y: 5 } };
         this.levelText = this.add.text(this.cameras.main.width - 16, 16, `Level: ${levelIndex}`, textStyle).setOrigin(1, 0);
@@ -101,75 +94,70 @@ class GameScene extends Phaser.Scene {
         this.statusText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 50, '', { fontSize: '48px', fill: '#ff0000', fontStyle: 'bold' }).setOrigin(0.5).setVisible(false);
         this.startButton = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY, 'START GAME', buttonStyle).setOrigin(0.5).setInteractive().on('pointerdown', this.startGame, this);
         this.restartButton = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY + 50, 'NEXT LEVEL', buttonStyle).setOrigin(0.5).setInteractive().on('pointerdown', this.restartScene, this).setVisible(false);
-
-
-        // --- Set World Gravity ---
         this.physics.world.gravity.y = this.GAME_GRAVITY;
-
-        // --- Initial State ---
         this.startButton.setVisible(this.gameState === this.GameState.PRESTART);
         this.restartButton.setVisible(this.gameState === this.GameState.GAMEOVER);
-
         console.log('Create finished. Waiting for start...');
     }
 
-    startGame() { /* ... startGame remains the same ... */
+    startGame() { /* ... same ... */
         if (this.gameState !== this.GameState.PRESTART) return;
         this.gameState = this.GameState.PLAYING;
-        this.startButton.setVisible(false);
-        this.statusText.setVisible(false);
-        this.restartButton.setVisible(false);
-        this.isPanicTimerRunning = false;
-        if(this.panicTimerEvent) this.panicTimerEvent.remove();
-        this.panicTimerEvent = null;
+        this.startButton.setVisible(false); this.statusText.setVisible(false); this.restartButton.setVisible(false);
+        this.isPanicTimerRunning = false; if(this.panicTimerEvent) this.panicTimerEvent.remove(); this.panicTimerEvent = null;
         this.timerText.setText('Panic Timer: -');
         this.player.setAlpha(1.0);
-        this.playerPrevX = this.player.x; // Reset prev pos on start
-        this.playerPrevY = this.player.y;
-        this.chickens.getChildren().forEach(c => { c.clearTint(); c.isPanicked = false; });
+        this.player.setTexture('fox'); this.player.setData('currentTextureKey', 'fox');
+        this.playerPrevX = this.player.x; this.playerPrevY = this.player.y;
+        this.isSneaking = false;
+        this.chickens.getChildren().forEach(c => {
+            c.clearTint(); c.isPanicked = false; c.body.setDragY(0);
+            c.setTexture('chicken'); c.setData('currentTextureKey', 'chicken');
+        });
         console.log('Game state set to PLAYING');
     }
 
-    restartScene() { /* ... restartScene remains the same ... */
+    restartScene() { /* ... same ... */
          console.log('Restart button clicked, restarting scene...');
          this.isPanicTimerRunning = false;
          if(this.panicTimerEvent) this.panicTimerEvent.remove();
          this.panicTimerEvent = null;
          this.scene.restart();
-     }
+    }
 
-    update(time, delta) {
+    update(time, delta) { /* ... same ... */
         if (this.gameState !== this.GameState.PLAYING) {
-             /* ... non-playing state logic remains the same ... */
              if(this.gameState === this.GameState.GAMEOVER) {
                  if (this.player.body) this.player.setVelocity(0);
                  this.chickens.getChildren().forEach(c => { if(c.body) c.setVelocity(0); });
              }
             return;
         }
-
-        // --- GAME LOGIC (runs only when playing) ---
         const playerMoved = this.player.x !== this.playerPrevX || this.player.y !== this.playerPrevY;
-
-        this.handlePlayerMovement(); // Handle input FIRST
-        this.updateChickenIdleBehavior(); // Update idle turning SECOND
-        this.checkChickenDetection(playerMoved); // Check detection THIRD (pass playerMoved status)
-        this.updateChickenMovement(); // Update panicked movement FOURTH
-
-        // Update Timer Display
+        this.handlePlayerMovement();
+        this.updateSpriteTextures();
+        this.updateChickenIdleBehavior();
+        this.checkChickenDetection(playerMoved);
+        this.updateChickenMovement();
         if (this.isPanicTimerRunning && this.panicTimerEvent) {
             const remaining = Math.max(0, Math.ceil(this.panicTimerEvent.getRemainingSeconds()));
             this.timerText.setText(`Panic Timer: ${remaining}`);
         }
-
-        // --- Store player position for next frame ---
         this.playerPrevX = this.player.x;
         this.playerPrevY = this.player.y;
     }
 
-    handlePlayerMovement() { /* ... player movement code remains the same ... */
+    handlePlayerMovement() { /* ... same ... */
         if (!this.player || !this.player.body) return;
-        this.isSneaking = this.keyS.isDown; // Update sneak status based on key
+        let currentlyHoldingSneak = this.keyS.isDown;
+        let didJump = false;
+        if (this.keySpace.isDown && this.player.body.blocked.down && !this.isSneaking) {
+            this.player.setVelocityY(-this.PLAYER_JUMP_SPEED);
+            this.isSneaking = false;
+            currentlyHoldingSneak = false;
+            didJump = true;
+        }
+        if (!didJump) { this.isSneaking = currentlyHoldingSneak; }
         const currentMoveSpeed = this.isSneaking ? this.PLAYER_SNEAK_SPEED : this.PLAYER_MOVE_SPEED;
         if (this.keyA.isDown || this.cursors.left.isDown) {
             this.player.setVelocityX(-currentMoveSpeed); this.player.setFlipX(true);
@@ -177,113 +165,138 @@ class GameScene extends Phaser.Scene {
             this.player.setVelocityX(currentMoveSpeed); this.player.setFlipX(false);
         } else { this.player.setVelocityX(0); }
         this.player.setAlpha(this.isSneaking ? 0.7 : 1.0);
-        if (this.keySpace.isDown && this.player.body.touching.down) {
-            this.player.setVelocityY(-this.PLAYER_JUMP_SPEED);
-        }
     }
 
-    // --- NEW: Handles idle behavior (random turning) ---
-    updateChickenIdleBehavior() {
+    updateChickenIdleBehavior() { /* ... same ... */
         const settings = this.activeChickenSettings;
         this.chickens.getChildren().forEach(chicken => {
-            // Only turn if active and NOT panicked
             if (chicken.active && !chicken.isPanicked) {
                 if (Math.random() < settings.idleTurnProb) {
-                    chicken.facingDirection *= -1; // Flip direction
+                    chicken.facingDirection *= -1;
                     chicken.setFlipX(chicken.facingDirection < 0);
-                    // Optional: Add a small delay before they can turn again?
                 }
             }
         });
     }
-
-    // --- REVISED: Chicken Detection Logic ---
-    checkChickenDetection(playerMoved) { // Receive player movement status
+    checkChickenDetection(playerMoved) { /* ... same ... */
         if (!this.player) return;
-
         this.chickens.getChildren().forEach(chicken => {
-            if (!chicken.active || chicken.isPanicked) {
-                return; // Skip inactive or already panicked chickens
-            }
-
+            if (!chicken.active || chicken.isPanicked) return;
             const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, chicken.x, chicken.y);
             const chickenIsFacingPlayer = Math.sign(this.player.x - chicken.x) === chicken.facingDirection;
-
             let panicTriggered = false;
-
-            // 1. Normal Detection (Not Sneaking)
             if (!this.isSneaking && distance < this.NORMAL_DETECTION_RADIUS) {
-                console.log(`Chicken at (${Math.round(chicken.x)}, ${Math.round(chicken.y)}) sees non-sneaking player.`);
                 panicTriggered = true;
-            }
-            // 2. Sneak Detection (Requires Movement & Facing)
-            else if (this.isSneaking && playerMoved && distance < this.SNEAK_MOVEMENT_DETECTION_RADIUS && chickenIsFacingPlayer) {
-                 console.log(`Chicken at (${Math.round(chicken.x)}, ${Math.round(chicken.y)}) sees sneaking player MOVE while facing.`);
+            } else if (this.isSneaking && playerMoved && distance < this.SNEAK_MOVEMENT_DETECTION_RADIUS && chickenIsFacingPlayer) {
                  panicTriggered = true;
             }
-
-            // Trigger panic if any condition met
-            if (panicTriggered) {
-                this.panicChicken(chicken);
-            }
+            if (panicTriggered) { this.panicChicken(chicken); }
         });
     }
-
-    // --- REVISED: Panicked Chicken Movement (No changes needed from previous version) ---
-    updateChickenMovement() { /* ... Panicked movement code remains the same ... */
+    updateChickenMovement() { /* ... same ... */
         const settings = this.activeChickenSettings;
         const chickenJumpVelocity = -(this.PLAYER_JUMP_SPEED * settings.jumpVelMult);
         this.chickens.getChildren().forEach(chicken => {
-            if (chicken.active && chicken.isPanicked && chicken.body) {
-                const isOnGround = chicken.body.touching.down;
+            if (!chicken.active || !chicken.body) return;
+            const isOnGround = chicken.body.blocked.down;
+            if (chicken.isPanicked) {
                 const currentPanicSpeed = isOnGround ? settings.groundSpeed : settings.airSpeed;
+                if (!isOnGround) { chicken.body.setDragY(this.CHICKEN_GLIDE_DRAG_Y); }
+                else { chicken.body.setDragY(0); }
                 if (Math.random() < settings.dirChangeProb) {
                      const moveDirection = (Math.random() < 0.5) ? -1 : 1;
                      chicken.setVelocityX(moveDirection * currentPanicSpeed);
-                     chicken.setFlipX(moveDirection < 0);
+                     chicken.facingDirection = moveDirection; chicken.setFlipX(moveDirection < 0);
                 } else {
-                    const currentSign = Math.sign(chicken.body.velocity.x) || chicken.facingDirection; // Use facing dir if stopped
+                    const currentSign = Math.sign(chicken.body.velocity.x) || chicken.facingDirection;
                      chicken.setVelocityX(currentSign * currentPanicSpeed);
-                     // Ensure flip matches velocity/facing direction
                      if (chicken.body.velocity.x !== 0) chicken.setFlipX(chicken.body.velocity.x < 0);
                      else chicken.setFlipX(chicken.facingDirection < 0);
                 }
                  if (isOnGround && Math.random() < settings.jumpProb) {
                      chicken.setVelocityY(chickenJumpVelocity);
                  }
-            }
+            } else { chicken.body.setDragY(0); }
         });
     }
 
+     // --- REVISED: Update textures with landing flash fix ---
+     updateSpriteTextures() {
+        // Player
+        if (this.player && this.player.body) {
+            const playerOnGround = this.player.body.blocked.down;
+            const playerVelocityY = this.player.body.velocity.y;
+            const currentTextureKey = this.player.getData('currentTextureKey');
+            let targetPlayerKey = currentTextureKey; // Default to current to avoid unnecessary changes
 
-    panicChicken(chicken) {
-        // Prevent double-panicking in the same frame
+            if (playerOnGround) {
+                if (this.isSneaking) {
+                    targetPlayerKey = 'fox_sneak';
+                } else {
+                    // If on ground and not sneaking, ensure it's 'fox'
+                    // This handles landing and normal ground state.
+                    targetPlayerKey = 'fox';
+                }
+            } else { // Airborne
+                // Only switch to jump sprite if significant upward velocity
+                if (playerVelocityY < -50) { // Adjust this threshold as needed
+                    targetPlayerKey = 'fox_jump';
+                } else if (currentTextureKey === 'fox_jump' && playerVelocityY >= 0) {
+                    // If currently 'fox_jump' and has reached apex or is falling, switch back to 'fox'
+                    targetPlayerKey = 'fox';
+                }
+                // If falling and was 'fox' or 'fox_sneak', it remains 'fox' (or 'fox_sneak' if isSneaking is somehow true airborne, but handlePlayerMovement prevents this on jump)
+                // The primary case here is to ensure 'fox_jump' reverts to 'fox' mid-air when falling.
+                // If this.isSneaking is true while airborne (e.g., snuck off a ledge), it will show 'fox' due to !playerOnGround.
+                // If you want a specific airborne sneak sprite, that would be another condition.
+            }
+
+            if (currentTextureKey !== targetPlayerKey) {
+                const oldFlipX = this.player.flipX;
+                this.player.setTexture(targetPlayerKey);
+                this.player.setData('currentTextureKey', targetPlayerKey);
+                this.player.setFlipX(oldFlipX);
+                // console.log(`Player Texture: ${targetPlayerKey}, Ground: ${playerOnGround}, VelY: ${playerVelocityY.toFixed(2)}`);
+            }
+        }
+
+        // Chickens
+        this.chickens.getChildren().forEach(chicken => {
+             if (chicken.active && chicken.body) {
+                 const chickenOnGround = chicken.body.blocked.down;
+                 const targetChickenKey = chickenOnGround ? 'chicken' : 'chicken_jump';
+                 if (chicken.getData('currentTextureKey') !== targetChickenKey) {
+                     const oldFlipX = chicken.flipX;
+                     chicken.setTexture(targetChickenKey);
+                     chicken.setData('currentTextureKey', targetChickenKey);
+                     chicken.setFlipX(oldFlipX);
+                 }
+             }
+         });
+    }
+
+
+    panicChicken(chicken) { /* ... same ... */
         if (!chicken.active || chicken.isPanicked || this.gameState !== this.GameState.PLAYING) return;
-
         console.log(`Chicken at (${Math.round(chicken.x)}, ${Math.round(chicken.y)}) panicked!`);
         chicken.isPanicked = true;
         chicken.setTint(0xffaaaa);
-        // Ensure chicken has some initial velocity when panicked if desired
-        if(chicken.body) { // Small initial hop/scoot maybe?
-             const moveDirection = (Math.random() < 0.5) ? -1 : 1;
-             chicken.setVelocityX(moveDirection * this.activeChickenSettings.groundSpeed * 0.5); // Start slower?
-             if(chicken.body.touching.down) chicken.setVelocityY(-(this.PLAYER_JUMP_SPEED * this.activeChickenSettings.jumpVelMult * 0.3)); // Small hop
+        if(chicken.body) {
+             const moveDirection = chicken.facingDirection * -1;
+             chicken.facingDirection = moveDirection; chicken.setFlipX(moveDirection < 0);
+             chicken.setVelocityX(moveDirection * this.activeChickenSettings.groundSpeed * 0.6);
+             if(chicken.body.blocked.down) chicken.setVelocityY(-(this.PLAYER_JUMP_SPEED * this.activeChickenSettings.jumpVelMult * 0.4));
         }
-
-        if (!this.isPanicTimerRunning) {
-            this.startPanicTimer();
-        }
+        if (!this.isPanicTimerRunning) { this.startPanicTimer(); }
     }
-
-    startPanicTimer() { /* ... Timer start logic remains the same ... */
+    startPanicTimer() { /* ... same ... */
         if (this.isPanicTimerRunning || this.gameState !== this.GameState.PLAYING) return;
         console.log(`Starting global panic timer (${this.panicTimerValue}s)!`);
         this.isPanicTimerRunning = true;
         this.timerText.setText(`Panic Timer: ${this.panicTimerValue}`);
         this.panicTimerEvent = this.time.delayedCall(this.panicTimerValue * 1000, this.onTimerEnd, [], this);
     }
-
-    onTimerEnd() { /* ... Timer end / Lose logic remains the same ... */
+    onTimerEnd() { /* ... same ... */
         console.log("Panic timer ended!");
         if (this.gameState !== this.GameState.PLAYING) return;
         this.isPanicTimerRunning = false;
@@ -292,59 +305,35 @@ class GameScene extends Phaser.Scene {
             this.showEndGameMessage(`Level ${this.currentLevel} Failed!`, '#ff0000');
         }
     }
-
-    // --- REVISED: Eat Chicken - includes witness panic ---
-    eatChicken(player, eatenChicken) {
+    eatChicken(player, eatenChicken) { /* ... same ... */
         if (!eatenChicken.active || this.gameState !== this.GameState.PLAYING) return;
-
-        const eatenX = eatenChicken.x; // Store position before destroying
-        const eatenY = eatenChicken.y;
-
+        const eatenX = eatenChicken.x; const eatenY = eatenChicken.y;
         console.log(`Chicken eaten at (${Math.round(eatenX)}, ${Math.round(eatenY)})!`);
-        eatenChicken.destroy(); // Destroy the chicken
-
+        eatenChicken.destroy();
         this.chickensRemaining--;
         this.chickenCountText.setText(`Chickens: ${this.chickensRemaining}`);
         console.log(`Chickens remaining: ${this.chickensRemaining}`);
-
-        // --- Witness Panic Check ---
         this.chickens.getChildren().forEach(witnessChicken => {
-            // Skip if witness is inactive or already panicked
-            if (!witnessChicken.active || witnessChicken.isPanicked) {
-                return;
-            }
-
+            if (!witnessChicken.active || witnessChicken.isPanicked) return;
             const distanceToEvent = Phaser.Math.Distance.Between(witnessChicken.x, witnessChicken.y, eatenX, eatenY);
-
-            // Check if witness is close enough
             if (distanceToEvent < this.WITNESS_PANIC_RADIUS) {
-                // Check if witness is facing the direction of the eaten chicken
                 const isFacingEvent = Math.sign(eatenX - witnessChicken.x) === witnessChicken.facingDirection;
                 if (isFacingEvent) {
-                    console.log(`Witness chicken at (${Math.round(witnessChicken.x)}, ${Math.round(witnessChicken.y)}) saw the event!`);
-                    this.panicChicken(witnessChicken); // Panic the witness
+                    console.log(`Witness chicken saw event!`);
+                    this.panicChicken(witnessChicken);
                 }
             }
         });
-        // --- End Witness Panic Check ---
-
-
-        // Check for Win Condition
-        if (this.chickensRemaining === 0) {
-            this.winGame();
-        }
+        if (this.chickensRemaining === 0) { this.winGame(); }
     }
-
-
-    winGame() { /* ... Win game logic remains the same ... */
+    winGame() { /* ... same ... */
         if (this.gameState !== this.GameState.PLAYING) return;
         console.log(`WIN - Level ${this.currentLevel} Complete!`);
         const levelToShow = this.currentLevel;
         this.currentLevel++;
         if (levelToShow >= this.MAX_LEVEL) {
             this.showEndGameMessage(`ALL LEVELS COMPLETE!`, '#00ffaa');
-             this.currentLevel = this.MAX_LEVEL + 1;
-             this.restartButton.setText('PLAY AGAIN?');
+             this.currentLevel = this.MAX_LEVEL + 1; this.restartButton.setText('PLAY AGAIN?');
         } else {
             this.showEndGameMessage(`Level ${levelToShow} Complete!`, '#00ff00');
             this.restartButton.setText(`START LEVEL ${this.currentLevel}`);
@@ -352,22 +341,19 @@ class GameScene extends Phaser.Scene {
         if (this.panicTimerEvent) { this.panicTimerEvent.remove(false); }
         this.timerText.setText('Panic Timer: -');
     }
-
-
-    showEndGameMessage(message, color) { /* ... showEndGameMessage logic remains the same ... */
+    showEndGameMessage(message, color) { /* ... same ... */
         this.gameState = this.GameState.GAMEOVER;
         this.statusText.setText(message).setFill(color).setVisible(true);
         if (message.includes('Failed')) {
              this.restartButton.setText('TRY AGAIN?');
-             this.restartButton.off('pointerdown').on('pointerdown', this.restartScene, this); // Ensure correct listener
+             this.restartButton.off('pointerdown').on('pointerdown', this.restartScene, this);
         } else if (this.currentLevel > this.MAX_LEVEL) {
              this.restartButton.setText('PLAY AGAIN?');
              this.restartButton.off('pointerdown').on('pointerdown', () => {
                  this.currentLevel = 1; this.restartScene();
              }, this);
         } else {
-             // Text already set in winGame
-             this.restartButton.off('pointerdown').on('pointerdown', this.restartScene, this); // Ensure correct listener
+             this.restartButton.off('pointerdown').on('pointerdown', this.restartScene, this);
         }
         this.restartButton.setVisible(true);
         this.isPanicTimerRunning = false;
@@ -377,15 +363,19 @@ class GameScene extends Phaser.Scene {
 
 } // --- End of GameScene class ---
 
-
-// --- Game Configuration (No changes needed) ---
+// --- Game Configuration ---
 const config = {
     type: Phaser.CANVAS, width: 800, height: 600, parent: 'game-container',
     backgroundColor: '#333333',
-    physics: { default: 'arcade', arcade: { debug: false /* Set true to debug physics */ } },
+    physics: {
+        default: 'arcade',
+        arcade: {
+            debug: false // <<<--- KEEP TRUE FOR ADJUSTING BODY CONSTANTS IN CONSTRUCTOR
+        }
+    },
     scene: [GameScene]
 };
 
-// --- Create Game Instance (No changes needed) ---
+// --- Create Game Instance ---
 console.log("Window loaded, starting Phaser game...");
 const game = new Phaser.Game(config);
